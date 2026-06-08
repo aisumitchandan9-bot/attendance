@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mark Attendance</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/fingerprintjs2/2.1.4/fingerprint2.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@300;400;600&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0a0a0f;
+    --surface: #12121a;
+    --surface2: #1c1c28;
+    --border: #2a2a3a;
+    --accent: #6ee7b7;
+    --accent2: #818cf8;
+    --text: #e8e8f0;
+    --muted: #6b6b80;
+    --danger: #f87171;
+    --warn: #fbbf24;
+    --radius: 12px;
+  }
+
+  body {
+    font-family: 'IBM Plex Sans', sans-serif;
+    background: var(--bg); color: var(--text);
+    min-height: 100vh; display: flex;
+    align-items: center; justify-content: center;
+    padding: 24px;
+  }
+
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background-image:
+      linear-gradient(var(--border) 1px, transparent 1px),
+      linear-gradient(90deg, var(--border) 1px, transparent 1px);
+    background-size: 40px 40px;
+    opacity: 0.25; pointer-events: none; z-index: 0;
+  }
+
+  .card {
+    position: relative; z-index: 1;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 36px 32px;
+    width: 100%; max-width: 420px;
+  }
+
+  /* ── States ── */
+  .state { display: none; flex-direction: column; gap: 20px; }
+  .state.active { display: flex; }
+
+  /* ── Header ── */
+  .card-header { text-align: center; }
+  .card-icon {
+    width: 56px; height: 56px;
+    border-radius: 16px;
+    background: rgba(110,231,183,0.1);
+    border: 1px solid rgba(110,231,183,0.2);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 24px; margin: 0 auto 16px;
+  }
+  .card-icon.error-icon { background: rgba(248,113,113,0.1); border-color: rgba(248,113,113,0.2); }
+  .card-icon.success-icon { background: rgba(110,231,183,0.1); border-color: rgba(110,231,183,0.25); }
+  .card-icon.warn-icon { background: rgba(251,191,36,0.1); border-color: rgba(251,191,36,0.2); }
+
+  h1 { font-size: 20px; font-weight: 600; margin-bottom: 6px; }
+  .sub { font-size: 14px; color: var(--muted); line-height: 1.5; }
+
+  /* ── Session info chips ── */
+  .chips { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+  .chip {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px; padding: 4px 10px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 20px; color: var(--muted);
+  }
+  .chip strong { color: var(--text); }
+
+  /* ── Token timer ── */
+  .token-timer {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px 16px;
+    display: flex; align-items: center; gap: 12px;
+  }
+  .token-timer .tt-label { font-size: 12px; color: var(--muted); flex: 1; }
+  .token-timer .tt-time {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 13px; color: var(--warn);
+    min-width: 32px; text-align: right;
+  }
+  .tt-bar { flex: 2; height: 3px; background: var(--border); border-radius: 2px; overflow: hidden; }
+  .tt-fill { height: 100%; background: var(--warn); border-radius: 2px; transition: width 1s linear, background 0.3s; }
+  .tt-fill.ok { background: var(--accent); }
+
+  /* ── Form ── */
+  .field { display: flex; flex-direction: column; gap: 8px; }
+  .field label {
+    font-size: 12px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--muted);
+  }
+  .field input {
+    padding: 13px 16px;
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: var(--radius); color: var(--text);
+    font-family: inherit; font-size: 16px; outline: none;
+    transition: border-color 0.2s;
+    -webkit-appearance: none;
+  }
+  .field input:focus { border-color: var(--accent2); }
+  .field input.error-input { border-color: var(--danger); }
+
+  .btn {
+    padding: 14px;
+    border: none; border-radius: var(--radius);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 14px; font-weight: 600;
+    cursor: pointer; letter-spacing: 0.04em;
+    transition: opacity 0.15s, transform 0.1s;
+  }
+  .btn:hover:not(:disabled) { opacity: 0.85; transform: translateY(-1px); }
+  .btn:active { transform: translateY(0); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn-primary { background: var(--accent); color: #0a0a0f; }
+  .btn-outline {
+    background: transparent; color: var(--text);
+    border: 1px solid var(--border);
+  }
+
+  /* ── Security note ── */
+  .security-note {
+    display: flex; gap: 10px; align-items: flex-start;
+    background: rgba(129,140,248,0.06);
+    border: 1px solid rgba(129,140,248,0.15);
+    border-radius: var(--radius); padding: 12px 14px;
+    font-size: 12px; color: var(--muted); line-height: 1.5;
+  }
+  .security-note .icon { font-size: 14px; margin-top: 1px; flex-shrink: 0; }
+
+  /* ── Loading spinner ── */
+  .spinner {
+    width: 36px; height: 36px; margin: 0 auto;
+    border: 3px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── Success details ── */
+  .success-row {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 14px 16px;
+    display: flex; justify-content: space-between;
+    font-size: 13px;
+  }
+  .success-row .key { color: var(--muted); }
+  .success-row .val {
+    font-family: 'IBM Plex Mono', monospace;
+    color: var(--accent); font-size: 12px;
+  }
+
+  /* ── Error details ── */
+  .error-box {
+    background: rgba(248,113,113,0.06);
+    border: 1px solid rgba(248,113,113,0.2);
+    border-radius: var(--radius); padding: 14px 16px;
+    font-size: 13px; color: var(--danger); line-height: 1.6;
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+<div class="card">
+
+  <!-- STATE: Checking token -->
+  <div class="state active" id="state-checking">
+    <div class="card-header">
+      <div class="card-icon">⏳</div>
+      <h1>Verifying QR code…</h1>
+      <p class="sub">Checking that this QR is still valid</p>
+    </div>
+    <div class="spinner"></div>
+  </div>
+
+  <!-- STATE: Expired token -->
+  <div class="state" id="state-expired">
+    <div class="card-header">
+      <div class="card-icon error-icon">✕</div>
+      <h1>QR code expired</h1>
+      <p class="sub">This QR rotates every few seconds. Please scan the <strong>current QR</strong> on the projector screen.</p>
+    </div>
+    <div class="error-box">The link you scanned is no longer valid.<br>Look at the screen and scan again.</div>
+  </div>
+
+  <!-- STATE: Form -->
+  <div class="state" id="state-form">
+    <div class="card-header">
+      <div class="card-icon">✓</div>
+      <h1>Mark your attendance</h1>
+      <p class="sub">QR verified. Enter your details below.</p>
+    </div>
+
+    <div class="chips">
+      <div class="chip">Subject: <strong id="f-subject">—</strong></div>
+      <div class="chip">Section: <strong id="f-section">—</strong></div>
+      <div class="chip">Date: <strong id="f-date">—</strong></div>
+    </div>
+
+    <div class="token-timer">
+      <span class="tt-label">Token valid for</span>
+      <div class="tt-bar"><div class="tt-fill ok" id="tt-fill"></div></div>
+      <span class="tt-time" id="tt-time">—</span>
+    </div>
+
+    <div class="field">
+      <label>Roll number</label>
+      <input type="text" id="roll-input" placeholder="e.g. 22CS045" maxlength="20"
+             autocomplete="off" autocorrect="off" spellcheck="false"
+             oninput="this.value = this.value.toUpperCase()" />
+    </div>
+    <div class="field">
+      <label>Full name <span style="color:var(--muted);font-weight:400;text-transform:none">(optional)</span></label>
+      <input type="text" id="name-input" placeholder="Your name" maxlength="60" />
+    </div>
+
+    <div class="security-note">
+      <span class="icon">🔒</span>
+      <span>Your device fingerprint is recorded with this submission. Each device can only submit once per session.</span>
+    </div>
+
+    <button class="btn btn-primary" id="submit-btn" onclick="submitAttendance()">Submit attendance</button>
+  </div>
+
+  <!-- STATE: Submitting -->
+  <div class="state" id="state-submitting">
+    <div class="card-header">
+      <div class="card-icon">⬆</div>
+      <h1>Submitting…</h1>
+      <p class="sub">Recording your attendance in the sheet</p>
+    </div>
+    <div class="spinner"></div>
+  </div>
+
+  <!-- STATE: Success -->
+  <div class="state" id="state-success">
+    <div class="card-header">
+      <div class="card-icon success-icon">✓</div>
+      <h1>Attendance marked!</h1>
+      <p class="sub">Your attendance has been recorded successfully.</p>
+    </div>
+    <div class="success-row"><span class="key">Roll no.</span><span class="val" id="s-roll">—</span></div>
+    <div class="success-row"><span class="key">Subject</span><span class="val" id="s-subject">—</span></div>
+    <div class="success-row"><span class="key">Date</span><span class="val" id="s-date">—</span></div>
+    <div class="success-row"><span class="key">Time</span><span class="val" id="s-time">—</span></div>
+  </div>
+
+  <!-- STATE: Already marked -->
+  <div class="state" id="state-duplicate">
+    <div class="card-header">
+      <div class="card-icon warn-icon">!</div>
+      <h1>Already marked</h1>
+      <p class="sub">Your attendance for this session has already been recorded.</p>
+    </div>
+    <div class="error-box" style="color:var(--warn);border-color:rgba(251,191,36,0.2);background:rgba(251,191,36,0.06)">
+      Roll number already submitted for this class today.<br>
+      No proxy attendance is possible — each device and roll number can only submit once.
+    </div>
+  </div>
+
+  <!-- STATE: Blocked -->
+  <div class="state" id="state-blocked">
+    <div class="card-header">
+      <div class="card-icon error-icon">⛔</div>
+      <h1>Submission blocked</h1>
+      <p class="sub" id="blocked-reason">This device has already been used to submit attendance for this session.</p>
+    </div>
+    <div class="error-box" id="blocked-detail">Another submission was made from this device.</div>
+  </div>
+
+  <!-- STATE: Error -->
+  <div class="state" id="state-error">
+    <div class="card-header">
+      <div class="card-icon error-icon">✕</div>
+      <h1>Something went wrong</h1>
+      <p class="sub">Could not connect to the server. Please try again.</p>
+    </div>
+    <div class="error-box" id="error-detail">Network error</div>
+    <button class="btn btn-outline" onclick="location.reload()">Try again</button>
+  </div>
+
+</div>
+
+<script>
+// ── Parse URL params ──
+const params = new URLSearchParams(location.search);
+const TOKEN      = params.get('token') || '';
+const SESSION_ID = params.get('sessionId') || '';
+const SUBJECT    = params.get('subject') || '';
+const SECTION    = params.get('section') || '';
+const DATE       = params.get('date') || '';
+const SCRIPT_URL = params.get('scriptUrl') || '';
+const INTERVAL   = parseInt(params.get('interval') || '30');
+
+// ── States ──
+function setState(id) {
+  document.querySelectorAll('.state').forEach(s => s.classList.remove('active'));
+  document.getElementById('state-' + id).classList.add('active');
+}
+
+// ── Token validation (must match teacher logic) ──
+async function makeToken(secret, data) {
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey('raw', enc.encode(secret), {name:'HMAC',hash:'SHA-256'}, false, ['sign']);
+  const sig = await crypto.subtle.sign('HMAC', key, enc.encode(data));
+  return Array.from(new Uint8Array(sig)).map(b=>b.toString(16).padStart(2,'0')).join('').slice(0,24);
+}
+
+async function validateToken() {
+  // accept current window and the previous one (grace period)
+  const now = Math.floor(Date.now() / (INTERVAL * 1000));
+  const expected0 = await makeToken(SESSION_ID, SUBJECT + DATE + now);
+  const expected1 = await makeToken(SESSION_ID, SUBJECT + DATE + (now - 1));
+  return TOKEN === expected0 || TOKEN === expected1;
+}
+
+// ── Token countdown ──
+let tokenTimeLeft = 0;
+let countdownInterval = null;
+
+function startTokenCountdown() {
+  const elapsed = (Date.now() / 1000) % INTERVAL;
+  tokenTimeLeft = Math.ceil(INTERVAL - elapsed);
+
+  function tick() {
+    tokenTimeLeft--;
+    if (tokenTimeLeft <= 0) {
+      clearInterval(countdownInterval);
+      setState('expired');
+      return;
+    }
+    const pct = (tokenTimeLeft / INTERVAL) * 100;
+    const fill = document.getElementById('tt-fill');
+    fill.style.width = pct + '%';
+    fill.className = 'tt-fill' + (pct > 40 ? ' ok' : '');
+    document.getElementById('tt-time').textContent = tokenTimeLeft + 's';
+  }
+  document.getElementById('tt-time').textContent = tokenTimeLeft + 's';
+  document.getElementById('tt-fill').style.width = ((tokenTimeLeft/INTERVAL)*100) + '%';
+  countdownInterval = setInterval(tick, 1000);
+}
+
+// ── Device fingerprint ──
+async function getFingerprint() {
+  return new Promise(resolve => {
+    if (typeof Fingerprint2 === 'undefined') {
+      // fallback: basic fingerprint from navigator
+      const parts = [
+        navigator.userAgent,
+        screen.width + 'x' + screen.height,
+        screen.colorDepth,
+        Intl.DateTimeFormat().resolvedOptions().timeZone,
+        navigator.language,
+        navigator.hardwareConcurrency || 0,
+      ];
+      const hash = parts.join('|');
+      let h = 0;
+      for (let i = 0; i < hash.length; i++) h = Math.imul(31, h) + hash.charCodeAt(i) | 0;
+      resolve(Math.abs(h).toString(16));
+      return;
+    }
+
+    Fingerprint2.get(components => {
+      const values = components.map(c => c.value);
+      const hash = Fingerprint2.x64hash128(values.join(''), 31);
+      resolve(hash);
+    });
+  });
+}
+
+// ── Submit ──
+async function submitAttendance() {
+  const roll = document.getElementById('roll-input').value.trim().toUpperCase();
+  const name = document.getElementById('name-input').value.trim();
+
+  if (!roll) {
+    document.getElementById('roll-input').classList.add('error-input');
+    setTimeout(() => document.getElementById('roll-input').classList.remove('error-input'), 1200);
+    return;
+  }
+  if (!SCRIPT_URL) {
+    setState('error');
+    document.getElementById('error-detail').textContent = 'No backend URL configured.';
+    return;
+  }
+
+  setState('submitting');
+  clearInterval(countdownInterval);
+
+  const fp = await getFingerprint();
+  const now = new Date();
+  const timeStr = now.toTimeString().slice(0,8);
+
+  const payload = {
+    action: 'submit',
+    token: TOKEN,
+    sessionId: SESSION_ID,
+    subject: SUBJECT,
+    section: SECTION,
+    date: DATE,
+    rollNo: roll,
+    name,
+    fingerprint: fp,
+    interval: INTERVAL,
+    time: timeStr
+  };
+
+  try {
+    const res = await fetch(SCRIPT_URL, {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json();
+
+    if (data.status === 'ok') {
+      document.getElementById('s-roll').textContent    = roll;
+      document.getElementById('s-subject').textContent = SUBJECT;
+      document.getElementById('s-date').textContent    = DATE;
+      document.getElementById('s-time').textContent    = timeStr;
+      setState('success');
+    } else if (data.status === 'duplicate_roll') {
+      setState('duplicate');
+    } else if (data.status === 'duplicate_device') {
+      document.getElementById('blocked-reason').textContent = 'This device already submitted attendance this session.';
+      document.getElementById('blocked-detail').textContent = 'Each physical device can only submit once per session.';
+      setState('blocked');
+    } else if (data.status === 'rate_limited') {
+      document.getElementById('blocked-reason').textContent = 'Too many submissions from this network.';
+      document.getElementById('blocked-detail').textContent = 'IP rate limit reached. Only 1 submission per IP per session.';
+      setState('blocked');
+    } else if (data.status === 'invalid_token') {
+      setState('expired');
+    } else {
+      document.getElementById('error-detail').textContent = data.message || 'Unknown error';
+      setState('error');
+    }
+  } catch(e) {
+    document.getElementById('error-detail').textContent = 'Could not reach the server: ' + e.message;
+    setState('error');
+  }
+}
+
+// ── Init ──
+(async function init() {
+  if (!TOKEN || !SESSION_ID || !SCRIPT_URL) {
+    setState('error');
+    document.getElementById('error-detail').textContent = 'Invalid or missing QR code parameters. Please scan the QR again.';
+    return;
+  }
+
+  document.getElementById('f-subject').textContent = SUBJECT || '—';
+  document.getElementById('f-section').textContent = SECTION || '—';
+  document.getElementById('f-date').textContent    = DATE || '—';
+
+  // validate token client-side first
+  const valid = await validateToken();
+  if (!valid) {
+    setState('expired');
+    return;
+  }
+
+  setState('form');
+  startTokenCountdown();
+})();
+</script>
+</body>
+</html>
