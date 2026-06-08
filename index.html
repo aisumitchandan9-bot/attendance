@@ -464,7 +464,14 @@ async function renderQR() {
 }
 
 function buildStudentUrl(token) {
-  const base = window.location.href.replace('teacher.html', 'student.html');
+  // Build the base path robustly — works whether the URL is:
+  //   https://user.github.io/repo/          (GitHub Pages, index.html implicit)
+  //   https://user.github.io/repo/index.html
+  //   https://site.netlify.app/
+  //   file:///path/index.html  (local — won't work for students but at least points right)
+  const loc = window.location;
+  const dir = loc.pathname.replace(/\/(index\.html)?$/, '');  // strip trailing slash or index.html
+  const base = loc.origin + dir + '/student.html';
   const p = new URLSearchParams({
     token, sessionId,
     subject: sessionConfig.subject,
