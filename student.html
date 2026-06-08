@@ -425,38 +425,128 @@ async function submitAttendance() {
   };
 
   try {
-    const res = await fetch(SCRIPT_URL, {
-      method: 'POST',
-      body: JSON.stringify(payload)
-    });
-    const data = await res.json();
 
-    if (data.status === 'ok') {
-      document.getElementById('s-roll').textContent    = roll;
-      document.getElementById('s-subject').textContent = SUBJECT;
-      document.getElementById('s-date').textContent    = DATE;
-      document.getElementById('s-time').textContent    = timeStr;
-      setState('success');
-    } else if (data.status === 'duplicate_roll') {
-      setState('duplicate');
-    } else if (data.status === 'duplicate_device') {
-      document.getElementById('blocked-reason').textContent = 'This device already submitted attendance this session.';
-      document.getElementById('blocked-detail').textContent = 'Each physical device can only submit once per session.';
-      setState('blocked');
-    } else if (data.status === 'rate_limited') {
-      document.getElementById('blocked-reason').textContent = 'Too many submissions from this network.';
-      document.getElementById('blocked-detail').textContent = 'IP rate limit reached. Only 1 submission per IP per session.';
-      setState('blocked');
-    } else if (data.status === 'invalid_token') {
-      setState('expired');
-    } else {
-      document.getElementById('error-detail').textContent = data.message || 'Unknown error';
-      setState('error');
-    }
-  } catch(e) {
-    document.getElementById('error-detail').textContent = 'Could not reach the server: ' + e.message;
-    setState('error');
-  }
+console.log("SCRIPT_URL =", SCRIPT_URL);
+console.log("Payload =", payload);
+
+const res = await fetch(SCRIPT_URL, {
+method: 'POST',
+mode: 'cors',
+headers: {
+'Content-Type': 'text/plain;charset=utf-8'
+},
+body: JSON.stringify(payload)
+});
+
+if (!res.ok) {
+throw new Error(
+'HTTP Error ' + res.status
+);
+}
+
+const data = await res.json();
+
+if (data.status === 'ok') {
+
+```
+document.getElementById(
+  's-roll'
+).textContent = roll;
+
+document.getElementById(
+  's-subject'
+).textContent = SUBJECT;
+
+document.getElementById(
+  's-date'
+).textContent = DATE;
+
+document.getElementById(
+  's-time'
+).textContent = timeStr;
+
+setState('success');
+```
+
+} else if (
+data.status === 'duplicate_roll'
+) {
+
+```
+setState('duplicate');
+```
+
+} else if (
+data.status === 'duplicate_device'
+) {
+
+```
+document.getElementById(
+  'blocked-reason'
+).textContent =
+  'This device already submitted attendance this session.';
+
+document.getElementById(
+  'blocked-detail'
+).textContent =
+  'Each device can only submit once per session.';
+
+setState('blocked');
+```
+
+} else if (
+data.status === 'rate_limited'
+) {
+
+```
+document.getElementById(
+  'blocked-reason'
+).textContent =
+  'Too many submissions from this network.';
+
+document.getElementById(
+  'blocked-detail'
+).textContent =
+  'IP limit reached for this session.';
+
+setState('blocked');
+```
+
+} else if (
+data.status === 'invalid_token'
+) {
+
+```
+setState('expired');
+```
+
+} else {
+
+```
+document.getElementById(
+  'error-detail'
+).textContent =
+  data.message ||
+  'Unknown server error';
+
+setState('error');
+```
+
+}
+
+} catch(e) {
+
+console.error(e);
+
+document.getElementById(
+'error-detail'
+).textContent =
+'Could not reach server: ' +
+e.message +
+' | URL: ' +
+SCRIPT_URL;
+
+setState('error');
 }
 
 // ── Init ──
