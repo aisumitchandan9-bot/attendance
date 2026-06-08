@@ -565,6 +565,58 @@ function exportCSV() {
   a.download = `attendance_${sessionConfig.subject}_${sessionConfig.date}.csv`;
   a.click();
 }
+function buildStudentUrl(token) {
+
+const loc = window.location;
+
+const dir =
+loc.pathname.replace(
+//(index.html)?$/,
+''
+);
+
+const base =
+loc.origin +
+dir +
+'/student.html';
+
+return (
+base +
+'?token=' +
+encodeURIComponent(token) +
+
+```
+'&sessionId=' +
+encodeURIComponent(sessionId) +
+
+'&subject=' +
+encodeURIComponent(
+  sessionConfig.subject
+) +
+
+'&section=' +
+encodeURIComponent(
+  sessionConfig.section
+) +
+
+'&date=' +
+encodeURIComponent(
+  sessionConfig.date
+) +
+
+'&scriptUrl=' +
+encodeURIComponent(
+  scriptUrl
+) +
+
+'&interval=' +
+encodeURIComponent(
+  interval
+)
+```
+
+);
+}
 
 function endSession() {
   if (!confirm('End this session? The QR code will stop working.')) return;
