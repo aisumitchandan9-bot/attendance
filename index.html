@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Attendance — Teacher</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@300;400;600&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0a0a0f;
+    --surface: #12121a;
+    --surface2: #1c1c28;
+    --border: #2a2a3a;
+    --accent: #6ee7b7;
+    --accent2: #818cf8;
+    --text: #e8e8f0;
+    --muted: #6b6b80;
+    --danger: #f87171;
+    --warn: #fbbf24;
+    --radius: 12px;
+  }
+
+  body {
+    font-family: 'IBM Plex Sans', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* subtle grid bg */
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background-image:
+      linear-gradient(var(--border) 1px, transparent 1px),
+      linear-gradient(90deg, var(--border) 1px, transparent 1px);
+    background-size: 40px 40px;
+    opacity: 0.3;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .wrap { position: relative; z-index: 1; flex: 1; display: flex; flex-direction: column; }
+
+  /* ── HEADER ── */
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 18px 32px;
+    border-bottom: 1px solid var(--border);
+    background: rgba(10,10,15,0.8);
+    backdrop-filter: blur(12px);
+    position: sticky; top: 0; z-index: 10;
+  }
+  .logo {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 15px; font-weight: 600;
+    color: var(--accent);
+    letter-spacing: 0.04em;
+  }
+  .logo span { color: var(--muted); font-weight: 400; }
+  .header-right { display: flex; align-items: center; gap: 12px; }
+  .badge {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px; padding: 4px 10px;
+    border-radius: 20px; border: 1px solid;
+  }
+  .badge-live { border-color: var(--accent); color: var(--accent); }
+  .badge-live::before { content: '● '; animation: blink 1.2s step-start infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  /* ── SETUP SCREEN ── */
+  #setup-screen {
+    flex: 1; display: flex; align-items: center; justify-content: center;
+    padding: 40px 24px;
+  }
+  .setup-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 40px;
+    width: 100%; max-width: 480px;
+  }
+  .setup-card h1 {
+    font-size: 22px; font-weight: 600; margin-bottom: 6px;
+  }
+  .setup-card p { color: var(--muted); font-size: 14px; margin-bottom: 32px; }
+
+  .field { margin-bottom: 20px; }
+  .field label {
+    display: block; font-size: 12px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--muted); margin-bottom: 8px;
+  }
+  .field input, .field select {
+    width: 100%; padding: 12px 16px;
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: var(--radius); color: var(--text);
+    font-family: inherit; font-size: 15px;
+    outline: none; transition: border-color 0.2s;
+  }
+  .field input:focus, .field select:focus { border-color: var(--accent2); }
+  .field select option { background: var(--surface2); }
+
+  .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+
+  .btn-primary {
+    width: 100%; padding: 14px;
+    background: var(--accent); color: #0a0a0f;
+    border: none; border-radius: var(--radius);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 14px; font-weight: 600;
+    cursor: pointer; letter-spacing: 0.04em;
+    transition: opacity 0.15s, transform 0.1s;
+    margin-top: 8px;
+  }
+  .btn-primary:hover { opacity: 0.88; transform: translateY(-1px); }
+  .btn-primary:active { transform: translateY(0); }
+
+  /* ── LIVE SCREEN ── */
+  #live-screen {
+    display: none; flex: 1;
+    flex-direction: column; align-items: center;
+    padding: 32px 24px 40px;
+    gap: 28px;
+  }
+
+  .session-info {
+    display: flex; gap: 12px; flex-wrap: wrap; justify-content: center;
+  }
+  .info-chip {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 6px 16px;
+    font-size: 13px;
+  }
+  .info-chip strong { color: var(--accent); }
+
+  .qr-stage {
+    display: flex; flex-direction: column; align-items: center; gap: 20px;
+  }
+
+  .qr-frame {
+    position: relative;
+    background: #ffffff;
+    padding: 18px;
+    border-radius: 18px;
+    box-shadow: 0 0 0 1px var(--border), 0 0 60px rgba(110,231,183,0.12);
+  }
+  #qrcode canvas, #qrcode img { display: block; border-radius: 4px; }
+
+  .qr-overlay {
+    position: absolute; inset: 0;
+    border-radius: 18px;
+    background: rgba(10,10,15,0.92);
+    display: flex; align-items: center; justify-content: center;
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.15s;
+  }
+  .qr-overlay.show { opacity: 1; }
+  .qr-overlay span {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 13px; color: var(--warn);
+  }
+
+  .timer-row {
+    display: flex; align-items: center; gap: 16px; width: 100%;
+  }
+  .timer-track {
+    flex: 1; height: 4px;
+    background: var(--surface2);
+    border-radius: 2px; overflow: hidden;
+  }
+  .timer-fill {
+    height: 100%; background: var(--accent);
+    border-radius: 2px;
+    transition: width 1s linear, background 0.3s;
+  }
+  .timer-fill.warn { background: var(--warn); }
+  .timer-fill.crit { background: var(--danger); }
+  .timer-label {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 13px; color: var(--muted);
+    min-width: 28px; text-align: right;
+  }
+
+  .rotate-hint {
+    font-size: 12px; color: var(--muted); text-align: center;
+  }
+  .rotate-hint strong { color: var(--accent2); }
+
+  /* ── STATS ── */
+  .stats-row {
+    display: flex; gap: 16px; flex-wrap: wrap; justify-content: center;
+  }
+  .stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px 28px;
+    text-align: center; min-width: 120px;
+  }
+  .stat-card .num {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 32px; font-weight: 600;
+    color: var(--accent);
+  }
+  .stat-card .lbl {
+    font-size: 12px; color: var(--muted);
+    text-transform: uppercase; letter-spacing: 0.08em;
+    margin-top: 4px;
+  }
+
+  /* ── LOG TABLE ── */
+  .log-section {
+    width: 100%; max-width: 700px;
+  }
+  .log-section h2 {
+    font-size: 13px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--muted); margin-bottom: 12px;
+  }
+  .log-table-wrap {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden; max-height: 260px; overflow-y: auto;
+  }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  thead th {
+    background: var(--surface2);
+    padding: 10px 16px; text-align: left;
+    color: var(--muted); font-weight: 600;
+    font-size: 11px; text-transform: uppercase;
+    letter-spacing: 0.06em;
+    border-bottom: 1px solid var(--border);
+  }
+  tbody tr { border-bottom: 1px solid var(--border); transition: background 0.15s; }
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { background: var(--surface2); }
+  tbody td { padding: 10px 16px; }
+  .roll-pill {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px; padding: 2px 8px;
+    background: rgba(110,231,183,0.1);
+    border: 1px solid rgba(110,231,183,0.25);
+    border-radius: 4px; color: var(--accent);
+  }
+  .empty-log {
+    padding: 28px; text-align: center;
+    color: var(--muted); font-size: 13px;
+  }
+
+  /* controls */
+  .controls { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
+  .btn-sec {
+    padding: 10px 20px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); color: var(--text);
+    font-family: 'IBM Plex Mono', monospace; font-size: 12px;
+    cursor: pointer; transition: border-color 0.15s, color 0.15s;
+  }
+  .btn-sec:hover { border-color: var(--accent2); color: var(--accent2); }
+  .btn-danger { border-color: rgba(248,113,113,0.3); color: var(--danger); }
+  .btn-danger:hover { border-color: var(--danger); }
+
+  .toast {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(80px);
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 12px 20px;
+    font-size: 13px; opacity: 0;
+    transition: transform 0.3s, opacity 0.3s;
+    z-index: 100; white-space: nowrap;
+  }
+  .toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+  .toast.success { border-color: rgba(110,231,183,0.4); color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="logo">attend<span>.io</span> <span>/ teacher</span></div>
+    <div class="header-right">
+      <span class="badge badge-live" id="live-badge" style="display:none">LIVE</span>
+    </div>
+  </header>
+
+  <!-- SETUP -->
+  <div id="setup-screen">
+    <div class="setup-card">
+      <h1>Start a session</h1>
+      <p>Configure your class details. A rotating QR code will be generated for students to scan.</p>
+
+      <div class="field">
+        <label>Google Apps Script URL</label>
+        <input type="url" id="script-url" placeholder="https://script.google.com/macros/s/..." />
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>Subject code</label>
+          <input type="text" id="subject" placeholder="CS101" maxlength="20" />
+        </div>
+        <div class="field">
+          <label>Section</label>
+          <input type="text" id="section" placeholder="A" maxlength="10" />
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>Room</label>
+          <input type="text" id="room" placeholder="LH-3" maxlength="20" />
+        </div>
+        <div class="field">
+          <label>QR rotates every</label>
+          <select id="interval">
+            <option value="20">20 seconds</option>
+            <option value="30" selected>30 seconds</option>
+            <option value="45">45 seconds</option>
+            <option value="60">60 seconds</option>
+          </select>
+        </div>
+      </div>
+
+      <button class="btn-primary" onclick="startSession()">Generate QR & start session</button>
+    </div>
+  </div>
+
+  <!-- LIVE -->
+  <div id="live-screen">
+    <div class="session-info">
+      <div class="info-chip">Subject: <strong id="info-subject">—</strong></div>
+      <div class="info-chip">Section: <strong id="info-section">—</strong></div>
+      <div class="info-chip">Room: <strong id="info-room">—</strong></div>
+      <div class="info-chip">Date: <strong id="info-date">—</strong></div>
+    </div>
+
+    <div class="qr-stage">
+      <div class="qr-frame">
+        <div id="qrcode"></div>
+        <div class="qr-overlay" id="qr-overlay"><span>⟳ Refreshing…</span></div>
+      </div>
+      <div class="timer-row" style="max-width:280px;width:100%">
+        <div class="timer-track"><div class="timer-fill" id="timer-fill"></div></div>
+        <span class="timer-label" id="timer-label">30s</span>
+      </div>
+      <div class="rotate-hint">QR rotates every <strong id="hint-interval">30s</strong> — screenshots won't work</div>
+    </div>
+
+    <div class="stats-row">
+      <div class="stat-card"><div class="num" id="stat-count">0</div><div class="lbl">Present</div></div>
+      <div class="stat-card"><div class="num" id="stat-blocked">0</div><div class="lbl">Blocked</div></div>
+    </div>
+
+    <div class="log-section">
+      <h2>Attendance log</h2>
+      <div class="log-table-wrap">
+        <table>
+          <thead><tr><th>#</th><th>Roll no.</th><th>Name</th><th>Time</th><th>Status</th></tr></thead>
+          <tbody id="log-body"><tr><td colspan="5" class="empty-log">No submissions yet</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="controls">
+      <button class="btn-sec" onclick="copyStudentLink()">Copy student link</button>
+      <button class="btn-sec" onclick="exportCSV()">Export CSV</button>
+      <button class="btn-sec btn-danger" onclick="endSession()">End session</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ── State ──
+let sessionId = null;
+let scriptUrl = '';
+let interval = 30;
+let timeLeft = 30;
+let timerInterval = null;
+let qrRotateInterval = null;
+let currentToken = '';
+let pollInterval = null;
+let attendanceLog = [];
+let blockedCount = 0;
+let sessionConfig = {};
+
+// ── HMAC-like token using SubtleCrypto ──
+async function makeToken(secret, data) {
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey('raw', enc.encode(secret), {name:'HMAC', hash:'SHA-256'}, false, ['sign']);
+  const sig = await crypto.subtle.sign('HMAC', key, enc.encode(data));
+  return Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2,'0')).join('').slice(0,24);
+}
+
+const SESSION_SECRET = () => sessionId; // secret = sessionId (shared via QR URL)
+
+async function generateToken() {
+  const window_idx = Math.floor(Date.now() / (interval * 1000));
+  return await makeToken(SESSION_SECRET(), sessionConfig.subject + sessionConfig.date + window_idx);
+}
+
+// ── Session start ──
+async function startSession() {
+  const url = document.getElementById('script-url').value.trim();
+  const subject = document.getElementById('subject').value.trim().toUpperCase();
+  const section = document.getElementById('section').value.trim().toUpperCase();
+  const room = document.getElementById('room').value.trim();
+  interval = parseInt(document.getElementById('interval').value);
+
+  if (!url || !subject || !section) { showToast('Please fill in all required fields', false); return; }
+
+  scriptUrl = url;
+  sessionId = crypto.randomUUID();
+  const date = new Date().toISOString().split('T')[0];
+
+  sessionConfig = { subject, section, room, date };
+
+  document.getElementById('info-subject').textContent = subject;
+  document.getElementById('info-section').textContent = section;
+  document.getElementById('info-room').textContent = room || '—';
+  document.getElementById('info-date').textContent = date;
+  document.getElementById('hint-interval').textContent = interval + 's';
+
+  document.getElementById('setup-screen').style.display = 'none';
+  document.getElementById('live-screen').style.display = 'flex';
+  document.getElementById('live-badge').style.display = 'inline-block';
+
+  await renderQR();
+  startTimer();
+  startPolling();
+}
+
+// ── QR Rendering ──
+let qrObj = null;
+async function renderQR() {
+  currentToken = await generateToken();
+  const studentUrl = buildStudentUrl(currentToken);
+
+  const container = document.getElementById('qrcode');
+
+  if (!qrObj) {
+    container.innerHTML = '';
+    qrObj = new QRCode(container, {
+      text: studentUrl,
+      width: 240, height: 240,
+      colorDark: '#000000', colorLight: '#ffffff',
+      correctLevel: QRCode.CorrectLevel.M
+    });
+  } else {
+    const overlay = document.getElementById('qr-overlay');
+    overlay.classList.add('show');
+    setTimeout(() => {
+      qrObj.makeCode(studentUrl);
+      overlay.classList.remove('show');
+    }, 300);
+  }
+}
+
+function buildStudentUrl(token) {
+  const base = window.location.href.replace('teacher.html', 'student.html');
+  const p = new URLSearchParams({
+    token, sessionId,
+    subject: sessionConfig.subject,
+    section: sessionConfig.section,
+    date: sessionConfig.date,
+    scriptUrl,
+    interval
+  });
+  return base + '?' + p.toString();
+}
+
+// ── Timer ──
+function startTimer() {
+  timeLeft = interval;
+  updateTimerUI();
+  timerInterval = setInterval(() => {
+    timeLeft--;
+    if (timeLeft <= 0) {
+      timeLeft = interval;
+      renderQR();
+    }
+    updateTimerUI();
+  }, 1000);
+}
+
+function updateTimerUI() {
+  const pct = (timeLeft / interval) * 100;
+  const fill = document.getElementById('timer-fill');
+  fill.style.width = pct + '%';
+  fill.className = 'timer-fill' + (pct <= 20 ? ' crit' : pct <= 40 ? ' warn' : '');
+  document.getElementById('timer-label').textContent = timeLeft + 's';
+}
+
+// ── Polling for new attendance ──
+function startPolling() {
+  pollInterval = setInterval(fetchAttendance, 8000);
+}
+
+async function fetchAttendance() {
+  if (!scriptUrl) return;
+  try {
+    const url = scriptUrl + '?action=list&sessionId=' + sessionId;
+    const res = await fetch(url);
+    const data = await res.json();
+    if (data.entries) updateLog(data.entries, data.blocked || 0);
+  } catch(e) {}
+}
+
+function updateLog(entries, blocked) {
+  const newCount = entries.length;
+  if (newCount !== attendanceLog.length) {
+    attendanceLog = entries;
+    blockedCount = blocked;
+    renderLog();
+    document.getElementById('stat-count').textContent = newCount;
+    document.getElementById('stat-blocked').textContent = blocked;
+  }
+}
+
+function renderLog() {
+  const tbody = document.getElementById('log-body');
+  if (attendanceLog.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="5" class="empty-log">No submissions yet</td></tr>';
+    return;
+  }
+  tbody.innerHTML = attendanceLog.map((e, i) => `
+    <tr>
+      <td style="color:var(--muted)">${i+1}</td>
+      <td><span class="roll-pill">${e.rollNo}</span></td>
+      <td>${e.name || '—'}</td>
+      <td style="font-family:monospace;font-size:12px;color:var(--muted)">${e.time}</td>
+      <td style="color:var(--accent);font-size:12px">✓ Present</td>
+    </tr>`).join('');
+}
+
+// ── Utilities ──
+function copyStudentLink() {
+  generateToken().then(t => {
+    navigator.clipboard.writeText(buildStudentUrl(t));
+    showToast('Student link copied to clipboard', true);
+  });
+}
+
+function exportCSV() {
+  if (attendanceLog.length === 0) { showToast('No data to export', false); return; }
+  const rows = [['Roll No','Name','Time','Date','Subject','Section']];
+  attendanceLog.forEach(e => rows.push([e.rollNo, e.name||'', e.time, sessionConfig.date, sessionConfig.subject, sessionConfig.section]));
+  const csv = rows.map(r => r.map(v => `"${v}"`).join(',')).join('\n');
+  const a = document.createElement('a');
+  a.href = 'data:text/csv;charset=utf-8,' + encodeURIComponent(csv);
+  a.download = `attendance_${sessionConfig.subject}_${sessionConfig.date}.csv`;
+  a.click();
+}
+
+function endSession() {
+  if (!confirm('End this session? The QR code will stop working.')) return;
+  clearInterval(timerInterval);
+  clearInterval(pollInterval);
+  sessionId = null; qrObj = null;
+  document.getElementById('live-screen').style.display = 'none';
+  document.getElementById('setup-screen').style.display = 'flex';
+  document.getElementById('live-badge').style.display = 'none';
+  document.getElementById('qrcode').innerHTML = '';
+  attendanceLog = [];
+  showToast('Session ended', true);
+}
+
+function showToast(msg, ok) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show' + (ok ? ' success' : '');
+  setTimeout(() => t.className = 'toast', 2800);
+}
+</script>
+</body>
+</html>
